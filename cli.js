@@ -54,17 +54,21 @@ function generateSpeech() {
 	return speechDB[idx];
 }
 
-async function doChatter(chid) {
+async function doChatter(chid, schedule=true) {
+	let schMessage = '(not rescheduled)';
+	if (schedule) {
+		const nextDelay = genTimeoutMS();
+		schMessage = chalk`(next in {yellow ${ms(nextDelay.ms)} ({green ${nextDelay.type}})})`;
+		scheduleChatter(chid, nextDelay);
+	}
+
 	if (speechDB.length > 0) {
 		const ch = client.channels.cache.get(chid);
 		const term = generateSpeech();
 		await ch.send(`_${term}_`);
-		const nextDelay = genTimeoutMS();
-		console.log(chalk`{dim 🦜 {magenta ${ch.guild.name}}#{cyan ${ch.name}} "${term}" (next in {yellow ${ms(nextDelay.ms)} ({green ${nextDelay.type}})})}`);
-		scheduleChatter(chid, nextDelay);
+		console.log(chalk`{dim 🦜 {magenta ${ch.guild.name}}#{cyan ${ch.name}} "${term}" ${schMessage}}`);
 	} else {
-		console.log('WARNING: no phrases in database; nothing to send to channel');
-		scheduleChatter(chid);
+		console.log(`WARNING: no phrases in database; nothing to send to channel ${schMessage}`);
 	}
 }
 
@@ -77,30 +81,51 @@ function scheduleChatter(chid, delay) {
 
 function initialSchedule(ch) {
 	const id = ch.id;
-	const canSend = ch.viewable && ch.permissionsFor(client.user.id).has('SEND_MESSAGES');
-	if (ch.type === 'text' && canSend) {
-		const delay = genTimeoutMS(true);
-		scheduleChatter(id, delay);
-		console.log(chalk`{dim scheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}} in {yellow ${ms(delay.ms)}} ({green long})}`);
-	}
+	const delay = genTimeoutMS(true);
+	scheduleChatter(id, delay);
+	console.log(chalk`{dim scheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}} in {yellow ${ms(delay.ms)}} ({green long})}`);
 }
 
-client.on('ready', () => {
-	console.log(chalk`logged in as {bold.keyword('lime') ${client.user.tag}}!`);
+const isParticipatingChannel = ch => ch.viewable && ch.type === 'text' && ch.permissionsFor(client.user.id).has('SEND_MESSAGES');
 
-	// Set up initial timeouts
-	for (const [_, ch] of client.channels.cache.entries()) {
-		initialSchedule(ch);
+function *participatingChannels() {
+	for (const [id, ch] of client.channels.cache.entries()) {
+		if (isParticipatingChannel(ch)) {
+			yield [id, ch];
+		}
 	}
-});
+}
 
 const commands = {
 	'add': async ({msg, raw}) => {
 		addSpeech(raw);
 		await msg.react('✅');
 		await msg.reply(`added: _"${raw}"_`);
+	},
+	'poke': async ({msg}) => {
+		const pchans = [...participatingChannels()];
+		const total = pchans.length;
+		let i = 0;
+		const status = await msg.reply(`0 / ${total}`);
+
+		for (const [id, ch] of pchans) {
+			++i;
+			await status.edit(`${i} / ${total} (${id})`);
+			await doChatter(id, false); // do not schedule
+		}
+
+		await status.edit(`${total} / ${total} (done!)`);
 	}
 };
+
+client.on('ready', () => {
+	console.log(chalk`logged in as {bold.keyword('lime') ${client.user.tag}}!`);
+
+	// Set up initial timeouts
+	for (const [_, ch] of participatingChannels()) {
+		initialSchedule(ch);
+	}
+});
 
 client.on('message', async msg => {
 	const isOwner = msg.member && msg.member.id === adminID;
@@ -122,7 +147,9 @@ client.on('message', async msg => {
 client.on('guildCreate', async g => {
 	console.log(chalk`🎉 added to server: {magenta.bold ${g.name}}`);
 	for (const [_, ch] of g.channels.cache.entries()) {
-		initialSchedule(ch);
+		if (isParticipatingChannel(ch)) {
+			initialSchedule(ch);
+		}
 	}
 });
 
