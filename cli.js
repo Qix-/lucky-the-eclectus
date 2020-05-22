@@ -55,6 +55,12 @@ function generateSpeech() {
 }
 
 async function doChatter(chid, schedule=true) {
+	const ch = client.channels.cache.get(chid);
+	if (!isParticipatingChannel(ch)) {
+		schedules.delete(chid);
+		return;
+	}
+
 	let schMessage = '(not rescheduled)';
 	if (schedule) {
 		const nextDelay = genTimeoutMS();
@@ -63,7 +69,6 @@ async function doChatter(chid, schedule=true) {
 	}
 
 	if (speechDB.length > 0) {
-		const ch = client.channels.cache.get(chid);
 		const term = generateSpeech();
 		await ch.send(`_${term}_`);
 		console.log(chalk`{dim 🦜 {magenta ${ch.guild.name}}#{cyan ${ch.name}} "${term}" ${schMessage}}`);
@@ -72,11 +77,15 @@ async function doChatter(chid, schedule=true) {
 	}
 }
 
+const schedules = new Map();
+
 function scheduleChatter(chid, delay) {
+	if (schedules.has(chid)) clearTimeout(schedules.get(chid));
+
 	delay = delay || genTimeoutMS();
 	const {ms: msdelay} = delay;
-	setTimeout(doChatter, msdelay, chid);
-	const ch = client.channels.cache.get(chid);
+	const tohndl = setTimeout(doChatter, msdelay, chid);
+	schedules.set(chid, tohndl);
 }
 
 function initialSchedule(ch) {
@@ -86,7 +95,7 @@ function initialSchedule(ch) {
 	console.log(chalk`{dim scheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}} in {yellow ${ms(delay.ms)}} ({green long})}`);
 }
 
-const isParticipatingChannel = ch => ch.viewable && ch.type === 'text' && ch.permissionsFor(client.user.id).has('SEND_MESSAGES');
+const isParticipatingChannel = ch => ch && ch.viewable && ch.type === 'text' && ch.permissionsFor(client.user.id).has('SEND_MESSAGES');
 
 function *participatingChannels() {
 	for (const [id, ch] of client.channels.cache.entries()) {
@@ -149,6 +158,17 @@ client.on('guildCreate', async g => {
 	for (const [_, ch] of g.channels.cache.entries()) {
 		if (isParticipatingChannel(ch)) {
 			initialSchedule(ch);
+		}
+	}
+});
+
+client.on('guildDelete', async g => {
+	console.log(chalk`😭 removed from server: {magenta.bold ${g.name}}`);
+	for (const [id, ch] of g.channels.cache.entries()) {
+		if (isParticipatingChannel(ch) && schedules.has(id)) {
+			clearTimeout(schedules.get(id));
+			schedules.delete(id);
+			console.log(chalk`{dim unscheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}}}`);
 		}
 	}
 });
