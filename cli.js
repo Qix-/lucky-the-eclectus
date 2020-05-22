@@ -75,16 +75,22 @@ function scheduleChatter(chid, delay) {
 	const ch = client.channels.cache.get(chid);
 }
 
+function initialSchedule(ch) {
+	const id = ch.id;
+	const canSend = ch.viewable && ch.permissionsFor(client.user.id).has('SEND_MESSAGES');
+	if (ch.type === 'text' && canSend) {
+		const delay = genTimeoutMS(true);
+		scheduleChatter(id, delay);
+		console.log(chalk`{dim scheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}} in {yellow ${ms(delay.ms)}} ({green long})}`);
+	}
+}
+
 client.on('ready', () => {
 	console.log(chalk`logged in as {bold.keyword('lime') ${client.user.tag}}!`);
 
 	// Set up initial timeouts
-	for (const [id, ch] of client.channels.cache.entries()) {
-		if (ch.type === 'text') {
-			const delay = genTimeoutMS(true);
-			scheduleChatter(id, delay);
-			console.log(chalk`{dim scheduled {magenta ${ch.guild.name}}#{cyan ${ch.name}} in {yellow ${ms(delay.ms)}} ({green long})}`);
-		}
+	for (const [_, ch] of client.channels.cache.entries()) {
+		initialSchedule(ch);
 	}
 });
 
@@ -110,6 +116,13 @@ client.on('message', async msg => {
 		const args = raw.trim().split(/[\t\s]+/g);
 		console.log(chalk`{magenta.bold ADMIN ({red ${msg.member.displayName} {dim ${msg.member.id}}}):} {cyan !${match[2]}} ${raw}`);
 		await commands[match[2]]({msg, raw, args});
+	}
+});
+
+client.on('guildCreate', async g => {
+	console.log(chalk`🎉 added to server: {magenta.bold ${g.name}}`);
+	for (const [_, ch] of g.channels.cache.entries()) {
+		initialSchedule(ch);
 	}
 });
 
