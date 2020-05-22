@@ -25,7 +25,7 @@ const genTimeoutMS = long => (!long && Math.random() <= SHORT_TIMEOUT_CHANCE)
 	: { ms: Math.floor(Math.random() * (MAX_TIME - MIN_TIME) + MIN_TIME), type: 'long' };
 
 const dbPath = env('SPEECH_DB');
-const adminChannel = env('DISCORD_ADMIN_CHANNEL');
+const adminID = env('DISCORD_ADMIN_ID');
 
 let speechDB = (() => {
 	try {
@@ -97,21 +97,19 @@ const commands = {
 };
 
 client.on('message', async msg => {
-	if (msg.channel.id === adminChannel) {
-		const isOwner = msg.guild && msg.member && msg.member.id === msg.guild.ownerID;
+	const isOwner = msg.member && msg.member.id === adminID;
 
-		if (isOwner && msg.mentions.has(client.user) && msg.type === 'DEFAULT') {
-			const match = msg.content.match(/^<@!(\d+)>\s*!(\w+)(?:\s+(.+?))?\s*$/);
-			if (!match || match[1] !== client.user.id || !commands[match[2]]) {
-				await msg.react('⁉️');
-				return;
-			}
-
-			const raw = match[3] || '';
-			const args = raw.trim().split(/[\t\s]+/g);
-			console.log(chalk`{magenta.bold ADMIN ({red ${msg.member.displayName} {dim ${msg.member.id}}}):} {cyan !${match[2]}} ${raw}`);
-			await commands[match[2]]({msg, raw, args});
+	if (isOwner && msg.mentions.has(client.user) && msg.type === 'DEFAULT') {
+		const match = msg.content.match(/^<@!(\d+)>\s*(\w+)(?:\s+(.+?))?\s*$/);
+		if (!match || match[1] !== client.user.id || !commands[match[2]]) {
+			await msg.react('⁉️');
+			return;
 		}
+
+		const raw = match[3] || '';
+		const args = raw.trim().split(/[\t\s]+/g);
+		console.log(chalk`{magenta.bold ADMIN ({red ${msg.member.displayName} {dim ${msg.member.id}}}):} {cyan !${match[2]}} ${raw}`);
+		await commands[match[2]]({msg, raw, args});
 	}
 });
 
