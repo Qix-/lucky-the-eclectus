@@ -6,8 +6,8 @@ const Discord = require('discord.js');
 const chalk = require('chalk');
 const ms = require('ms');
 
-const MIN_TIME = 30000; // ms
-const MAX_TIME = 1000 * 60 * 30; // ms
+const MIN_TIME = 1000 * 60 * 10; // ms
+const MAX_TIME = 1000 * 60 * 60; // ms
 const MIN_TIME_SHORT = 500; // ms
 const MAX_TIME_SHORT = 2000; // ms
 const SHORT_TIMEOUT_CHANCE = 0.2;
